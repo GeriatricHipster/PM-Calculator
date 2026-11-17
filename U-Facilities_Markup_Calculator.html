@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>U-Facilities | Markup Calculator</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f3f4;color:#242124;font:16px system-ui,sans-serif}header{background:#25191c;color:white;border-bottom:6px solid #be1736;padding:2rem max(5vw,1rem)}header p{margin:0;color:#ffb4c0;letter-spacing:.12em;font-weight:750}h1{margin:.3em 0 0}main{max-width:1100px;margin:auto;padding:1.4rem;display:grid;grid-template-columns:2fr 1fr;gap:1.2rem;align-items:start}section{background:white;border:1px solid #e2dadd;border-radius:14px;padding:1.2rem}h2{margin:.1rem 0 1rem;font-size:1.25rem}label{display:block;font-weight:650;font-size:.9rem}input,button{font:inherit;border-radius:7px;padding:.55rem .65rem}input{width:100%;border:1px solid #a79ca0;margin-top:.2rem;min-width:0}button{border:1px solid #9c2036;background:white;color:#85162b;font-weight:650;cursor:pointer}button.primary{background:#a41530;color:white}.fields,.row{display:grid;gap:.65rem}.fields{grid-template-columns:1fr 1fr;margin-bottom:1.5rem}.row{grid-template-columns:minmax(0,2fr) minmax(6.5rem,1fr) auto;align-items:end;margin-bottom:.7rem}.money{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin:1rem 0}.money div{background:#faeff1;padding:.8rem;border-radius:8px}.money output{display:block;font-size:1.35rem;font-weight:750;overflow-wrap:anywhere}.actions{display:flex;gap:.65rem;flex-wrap:wrap}.muted{color:#65575c;font-size:.88rem}.saved{list-style:none;margin:0;padding:0}.saved li{border-top:1px solid #e6dfe2;padding:.65rem 0}.saved button{margin:.3rem .3rem 0 0}.saved strong{overflow-wrap:anywhere}#status{min-height:1.2em;margin-bottom:0} :focus-visible{outline:3px solid #245baf;outline-offset:2px}@media(max-width:730px){main{grid-template-columns:1fr}}@media(max-width:440px){main{padding:.65rem}.fields,.money{grid-template-columns:1fr}.row{grid-template-columns:1fr 1fr}.row label:first-child{grid-column:1/-1}}@media print{header{padding:1rem;color:black;background:white}header p{color:black}main{display:block}aside,button,#status{display:none!important}.row{grid-template-columns:2fr 1fr}section{border:0}}
+</style>
+<header><p>U-FACILITIES</p><h1>Markup Calculator</h1></header>
+<main><section><form id="calc">
+<h2>Project details</h2><div class="fields"><label>Project / WO Number<input id="wo" required maxlength="100"></label><label>Project Name<input id="name" maxlength="200"></label><label>Calculation Date<input id="date" type="date" required></label></div>
+<h2>Material line items</h2><div id="rows"></div><button type="button" id="add">+ Add line item</button>
+<div class="money"><div>Material Total<output id="total"></output></div><div>PM Fee (5%)<output id="fee"></output></div></div>
+<div class="actions"><button class="primary" type="submit">Save calculation</button><button type="button" id="fresh">New calculation</button><button type="button" id="print">Print / Save PDF</button></div><p id="status" class="muted" role="status"></p>
+</form></section><aside><section><h2>Saved calculations</h2><p class="muted">Saved in this browser on this device. Open a calculation to view or update it.</p><ul class="saved" id="saved"></ul></section></aside></main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id), key='ufacilities.markup.v1', usd=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
+let current=null, dirty=false;
+const say=s=>$('status').textContent=s;
+const display=c=>usd.format(c/100);
+function cents(value){return Math.round(Number(value||0)*100);}
+function totals(lines){const material=lines.reduce((sum,line)=>sum+cents(line.amount),0);return [material,Math.floor((material*5+50)/100)];}
+function lines(){return [...$('rows').children].map(r=>({description:r.querySelector('.description').value,amount:r.querySelector('.amount').value}));}
+function update(){const [material,fee]=totals(lines());$('total').textContent=display(material);$('fee').textContent=display(fee);}
+function addLine(line={description:'',amount:''}){const row=document.createElement('div');row.className='row';row.innerHTML='<label>Material description<input class="description" maxlength="250"></label><label>Amount ($)<input class="amount" type="number" min="0" max="99999999.99" step="0.01" inputmode="decimal"></label><button type="button" aria-label="Remove material line">Remove</button>';row.querySelector('.description').value=line.description;row.querySelector('.amount').value=line.amount;row.querySelector('button').onclick=()=>{row.remove();if(!$('rows').children.length)addLine();dirty=true;update();};$('rows').append(row);return row;}
+function today(){const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');}
+function load(){const data=JSON.parse(localStorage.getItem(key)||'[]');if(!Array.isArray(data))throw Error('Invalid saved data');return data;}
+function openRecord(record){current=record?.id??null;$('wo').value=record?.wo??'';$('name').value=record?.name??'';$('date').value=record?.date??today();$('rows').replaceChildren();(record?.lines?.length?record.lines:[undefined]).forEach(addLine);dirty=false;update();say(record?'Opened '+record.wo+'.':'');}
+function canSwitch(){return !dirty||confirm('Discard unsaved changes to this calculation?');}
+function renderSaved(){const list=$('saved');list.replaceChildren();try{const saved=load();if(!saved.length){list.textContent='No saved calculations yet.';return;}for(const rec of saved){const li=document.createElement('li'), title=document.createElement('strong'), detail=document.createElement('div'), open=document.createElement('button');title.textContent=rec.wo+(rec.name?' · '+rec.name:'');detail.className='muted';detail.textContent=rec.date+' · '+display(totals(rec.lines)[0])+' materials';open.type='button';open.textContent='Open';open.onclick=()=>{if(canSwitch())openRecord(rec);};li.append(title,detail,open);list.append(li);}}catch{list.textContent='Saved calculations are unavailable in this browser.';}}
+$('calc').addEventListener('input',()=>{dirty=true;update();});
+$('add').onclick=()=>{dirty=true;addLine().querySelector('input').focus();update();};
+$('fresh').onclick=()=>{if(canSwitch()){openRecord();$('wo').focus();}};
+$('print').onclick=()=>window.print();
+$('calc').onsubmit=e=>{e.preventDefault();const wo=$('wo').value.trim();if(!wo){say('Enter a Project / WO Number.');$('wo').focus();return;}try{const saved=load(),id=current||(globalThis.crypto?.randomUUID?.()??Date.now().toString(36)+Math.random().toString(36).slice(2));const rec={id,wo,name:$('name').value.trim(),date:$('date').value,lines:lines().filter(l=>l.description.trim()||l.amount!=='')};localStorage.setItem(key,JSON.stringify([rec,...saved.filter(r=>r.id!==id)]));current=id;dirty=false;renderSaved();say('Saved '+wo+'.');}catch{say('Could not save to this browser. You can still print or save a PDF.');}};
+openRecord();renderSaved();
+</script>
+</html>
